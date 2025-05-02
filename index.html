@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application Cross - Scan QR Code</title>
+    <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        #scanner { display: none; }
+        table { margin-top: 20px; border-collapse: collapse; width: 100%; }
+        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+
+    <h1>Gestion du classement pour le Cross</h1>
+
+    <label for="start-time">Heure de début de la course :</label>
+    <input type="time" id="start-time" required>
+    <button id="set-now-btn">Commencer maintenant</button>
+    <br><br>
+
+    <button id="start-scanner-btn">Commencer à scanner</button>
+    <button id="stop-scanner-btn" style="display:none;">Arrêter de scanner</button>
+    
+    <div id="scanner">
+        <h2>Scanner QR Code</h2>
+        <video id="video" width="300" height="200" style="border: 1px solid #ccc" autoplay></video>
+        <canvas id="canvas" style="display:none;"></canvas>
+    </div>
+
+    <h2>Résultats</h2>
+    <table id="result-table">
+        <thead>
+            <tr>
+                <th>Nom</th>
+                <th>Prénom</th>
+                <th>Classe</th>
+                <th>Équipe</th>
+                <th>N° du coureur</th>
+                <th>Temps de course (en secondes)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Données scannées apparaîtront ici -->
+        </tbody>
+    </table>
+
+    <script>
+        let startTime = null;
+        let isScanning = false;
+        let videoElement = document.getElementById('video');
+        let canvasElement = document.getElementById('canvas');
+        let canvasContext = canvasElement.getContext('2d');
+        let resultTable = document.getElementById('result-table').getElementsByTagName('tbody')[0];
+        let scannerStream = null;
+
+        document.getElementById('start-time').addEventListener('input', function() {
+            startTime = this.value;
+        });
+
+        document.getElementById('set-now-btn').addEventListener('click', function() {
+            let now = new Date();
+            let hours = String(now.getHours()).padStart(2, '0');
+            let minutes = String(now.getMinutes()).padStart(2, '0');
+            let seconds = String(now.getSeconds()).padStart(2, '0');
+            startTime = `${hours}:${minutes}:${seconds}`;
+            document.getElementById('start-time').value = startTime;
+        });
+
+        document.getElementById('start-scanner-btn').addEventListener('click', function() {
+            if (startTime && !isScanning) {
+                isScanning = true;
+                document.getElementById('scanner').style.display = 'block';
+                document.getElementById('stop-scanner-btn').style.display = 'inline-block';
+                startCamera();
+            }
+        });
+
+        document.getElementById('stop-scanner-btn').addEventListener('click', function() {
+            stopCamera();
+        });
+
+        function startCamera() {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                .then(function(stream) {
+                    videoElement.srcObject = stream;
+                    scannerStream = stream;
+                    videoElement.play();
+                    requestAnimationFrame(scanQRCode);
+                })
+                .catch(function(err) {
+                    console.error("Erreur d'accès à la caméra:", err);
+                });
+        }
+
+        function stopCamera() {
+            if (scannerStream) {
+                scannerStream.getTracks().forEach(track => track.stop());
+            }
+            isScanning = false;
+            document.getElementById('scanner').style.display = 'none';
+            document.getElementById('stop-scanner-btn').style.display = 'none';
+        }
+
+        function scanQRCode() {
+    if (!isScanning) return;
+
+    canvasElement.width = videoElement.videoWidth;
+    canvasElement.height = videoElement.videoHeight;
+
+    canvasContext.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+    let imageData = canvasContext.getImageData(0, 0, canvasElement.width, canvasElement.height);
+    let code = jsQR(imageData.data, canvasElement.width, canvasElement.height);
+
+    if (code) {
+        console.log("QR détecté :", code.data); // 🔍 Ajout
+        try {
+            let qrData = JSON.parse(code.data);
+            let confirmText = `Confirmer l'arrivée du coureur : ${qrData.numero} ?`;
+            if (confirm(confirmText)) {
+                let arrivalTime = new Date();
+                let startDate = new Date();
+                let [hours, minutes, seconds] = startTime.split(':');
+                startDate.setHours(hours, minutes, seconds);
+
+                let raceTime = Math.floor((arrivalTime - startDate) / 1000);
+
+                let newRow = resultTable.insertRow();
+                newRow.innerHTML = `
+                    <td>${qrData.nom}</td>
+                    <td>${qrData.prenom}</td>
+                    <td>${qrData.classe}</td>
+                    <td>${qrData.equipe}</td>
+                    <td>${qrData.numero}</td>
+                    <td>${raceTime}</td>
+                `;
+            }
+        } catch (e) {
+            console.error("QR non valide ou erreur de JSON :", e);
+        }
+    }
+
+    requestAnimationFrame(scanQRCode);
+}
+    </script>
+
+</body>
+</html>
