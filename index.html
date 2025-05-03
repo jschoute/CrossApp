@@ -1,193 +1,149 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Cross - Chronométrage par QR Code</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Application Cross - Scan QR Code</title>
+  <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f4; }
-    h1 { text-align: center; }
-    #startTimeDisplay, #sessionCodeDisplay { font-size: 1.1em; margin: 10px 0; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { padding: 8px 12px; border: 1px solid #ccc; text-align: center; }
-    th { background-color: #eee; }
-    #video { width: 100%; max-width: 600px; margin: 20px auto; display: none; }
-    #qrCanvas { display: block; margin: 10px auto; }
-    button { margin: 5px; padding: 10px; font-size: 1em; }
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    #scanner { display: none; }
+    table { margin-top: 20px; border-collapse: collapse; width: 100%; }
+    th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+    th { background-color: #f2f2f2; }
   </style>
 </head>
 <body>
-  <h1>Chronométrage du Cross - Scanner QR Code</h1>
-  <div>
-    <button id="startRaceBtn">Démarrer la course (Organisateur 1)</button>
-    <button id="startScanBtn" style="display:none;">Commencer à scanner (Organisateurs 2+)</button>
-  </div>
-  <div id="sessionCodeDisplay"></div>
-  <div id="startTimeDisplay">Heure de départ : -</div>
-  <canvas id="qrCanvas"></canvas>
-  <video id="video" autoplay muted playsinline></video>
 
-  <table id="resultsTable">
+  <h1>Gestion du classement pour le Cross</h1>
+
+  <label for="start-time">Heure de début de la course :</label>
+  <input type="time" id="start-time" required>
+  <button id="set-now-btn">Commencer maintenant</button>
+  <br><br>
+
+  <button id="start-scanner-btn">Commencer à scanner</button>
+  <button id="stop-scanner-btn" style="display:none;">Arrêter de scanner</button>
+
+  <div id="scanner">
+    <h2>Scanner QR Code</h2>
+    <video id="video" width="300" height="200" style="border: 1px solid #ccc" autoplay></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+  </div>
+
+  <h2>Résultats</h2>
+  <table id="result-table">
     <thead>
       <tr>
         <th>Nom</th>
         <th>Prénom</th>
         <th>Classe</th>
         <th>Équipe</th>
-        <th>Dossard</th>
-        <th>Temps</th>
+        <th>N° du coureur</th>
+        <th>Temps de course (en secondes)</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
 
-  <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
   <script>
-    const sheetURL = "https://script.google.com/macros/s/AKfycbx5Ni3LR9QbqLwIbabBYtUFaE-0SMCheYnG5oxcdNZ_gssy3rBoJYTJwPYmGHLo7WQF_w/exec";
-
-    let video = document.getElementById("video");
-    let canvas = document.createElement("canvas");
-    let context = canvas.getContext("2d");
     let startTime = null;
-    let sessionCode = null;
     let isScanning = false;
-    let scannedCodes = new Set();
+    let videoElement = document.getElementById('video');
+    let canvasElement = document.getElementById('canvas');
+    let canvasContext = canvasElement.getContext('2d');
+    let resultTable = document.querySelector('#result-table tbody');
+    let scannerStream = null;
 
-    const startTimeDisplay = document.getElementById("startTimeDisplay");
-    const sessionCodeDisplay = document.getElementById("sessionCodeDisplay");
-    const qrCanvas = document.getElementById("qrCanvas");
-    const resultTable = document.querySelector("#resultsTable tbody");
+    document.getElementById('start-time').addEventListener('input', function() {
+      startTime = this.value;
+    });
 
-    // Créer un code de session unique
-    function generateSessionCode() {
-      const now = new Date();
-      const timestamp = now.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
-      return `${timestamp}-${Math.random().toString(16).substr(2, 6)}`;
-    }
-
-    // Générer et afficher le QR de session
-    function showQRSessionCode(code, startTimeStr) {
-      const payload = JSON.stringify({ sessionCode: code, startTime: startTimeStr });
-      QRCode.toCanvas(qrCanvas, payload, { width: 250 }, (error) => {
-        if (error) console.error("QR Error:", error);
-      });
-    }
-
-    // Lancer la course (Organisateur 1)
-    document.getElementById("startRaceBtn").onclick = () => {
-      startTime = new Date();
-      sessionCode = generateSessionCode();
-      const startTimeStr = startTime.toISOString();
-      startTimeDisplay.textContent = "Heure de départ : " + startTime.toLocaleTimeString();
-      sessionCodeDisplay.textContent = "Code de session : " + sessionCode;
-      showQRSessionCode(sessionCode, startTimeStr);
-      document.getElementById("startScanBtn").style.display = "inline-block";
-    };
-
-    // Rejoindre une course (Organisateur 2+)
-    document.getElementById("startScanBtn").onclick = () => {
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(stream => {
-        video.srcObject = stream;
-        video.style.display = "block";
-
-        function scanSyncCode() {
-          if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            let imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-            let code = jsQR(imageData.data, imageData.width, imageData.height);
-            if (code) {
-              try {
-                let data = JSON.parse(code.data);
-                if (data.sessionCode && data.startTime) {
-                  sessionCode = data.sessionCode;
-                  startTime = new Date(data.startTime);
-                  startTimeDisplay.textContent = "Heure de départ : " + startTime.toLocaleTimeString();
-                  sessionCodeDisplay.textContent = "Synchronisé avec : " + sessionCode;
-                  qrCanvas.style.display = "none";
-                  startQRCodeScan(); // commence le scan des coureurs
-                }
-              } catch {}
-            }
-          }
-          if (!startTime) requestAnimationFrame(scanSyncCode);
-        }
-
-        scanSyncCode();
-      });
-    };
-
-    function startQRCodeScan() {
-      isScanning = true;
-      function scan() {
-        if (!isScanning) return;
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
-          let imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-          let code = jsQR(imageData.data, imageData.width, imageData.height);
-          if (code && !scannedCodes.has(code.data)) {
-            scannedCodes.add(code.data);
-            processQRCode(code.data);
-            setTimeout(() => scannedCodes.delete(code.data), 3000); // éviter doublons
-          }
-        }
-        requestAnimationFrame(scan);
-      }
-      scan();
-    }
-
-    function processQRCode(data) {
-      if (!startTime) {
-        alert("Veuillez d'abord démarrer la course.");
-        return;
-      }
-
-      let qrData;
-      try {
-        qrData = JSON.parse(data);
-      } catch (e) {
-        alert("QR Code invalide.");
-        return;
-      }
-
+    document.getElementById('set-now-btn').addEventListener('click', function() {
       let now = new Date();
-      let diff = new Date(now - startTime);
-      let minutes = String(diff.getUTCMinutes()).padStart(2, '0');
-      let seconds = String(diff.getUTCSeconds()).padStart(2, '0');
-      let millis = String(Math.floor(diff.getUTCMilliseconds() / 10)).padStart(2, '0');
-      let raceTime = `${minutes}:${seconds}:${millis}`;
+      let hours = String(now.getHours()).padStart(2, '0');
+      let minutes = String(now.getMinutes()).padStart(2, '0');
+      let seconds = String(now.getSeconds()).padStart(2, '0');
+      startTime = `${hours}:${minutes}:${seconds}`;
+      document.getElementById('start-time').value = startTime;
+    });
 
-      let newRow = resultTable.insertRow();
-      newRow.innerHTML = `
-        <td>${qrData.nom}</td>
-        <td>${qrData.prenom}</td>
-        <td>${qrData.classe}</td>
-        <td>${qrData.equipe}</td>
-        <td>${qrData.numero}</td>
-        <td>${raceTime}</td>
-      `;
+    document.getElementById('start-scanner-btn').addEventListener('click', function() {
+      if (startTime && !isScanning) {
+        isScanning = true;
+        document.getElementById('scanner').style.display = 'block';
+        document.getElementById('stop-scanner-btn').style.display = 'inline-block';
+        startCamera();
+      }
+    });
 
-      const payload = {
-        nom: qrData.nom,
-        prenom: qrData.prenom,
-        classe: qrData.classe,
-        equipe: qrData.equipe,
-        numero: qrData.numero,
-        temps: raceTime,
-        session: sessionCode
-      };
+    document.getElementById('stop-scanner-btn').addEventListener('click', stopCamera);
 
-      fetch(sheetURL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+    function startCamera() {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(function(stream) {
+          videoElement.srcObject = stream;
+          scannerStream = stream;
+
+          videoElement.onloadedmetadata = function() {
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+            requestAnimationFrame(scanQRCode);
+          };
+        })
+        .catch(function(err) {
+          console.error("Erreur d'accès à la caméra :", err);
+        });
+    }
+
+    function stopCamera() {
+      if (scannerStream) {
+        scannerStream.getTracks().forEach(track => track.stop());
+      }
+      isScanning = false;
+      document.getElementById('scanner').style.display = 'none';
+      document.getElementById('stop-scanner-btn').style.display = 'none';
+    }
+
+    function scanQRCode() {
+      if (!isScanning) return;
+
+      canvasContext.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+      let imageData = canvasContext.getImageData(0, 0, canvasElement.width, canvasElement.height);
+      let code = jsQR(imageData.data, canvasElement.width, canvasElement.height);
+
+      if (code) {
+        console.log("QR détecté :", code.data);
+        try {
+          let qrData = JSON.parse(code.data);
+          let confirmation = confirm(`Confirmer l'arrivée du coureur n° ${qrData.numero} ?`);
+          if (!confirmation) return requestAnimationFrame(scanQRCode);
+
+          let arrivalTime = new Date();
+          let startDate = new Date();
+          let [h, m, s] = startTime.split(':');
+          startDate.setHours(h, m, s);
+
+          let raceTime = Math.floor((arrivalTime - startDate) / 1000);
+
+          let newRow = resultTable.insertRow();
+          newRow.innerHTML = `
+            <td>${qrData.nom}</td>
+            <td>${qrData.prenom}</td>
+            <td>${qrData.classe}</td>
+            <td>${qrData.equipe}</td>
+            <td>${qrData.numero}</td>
+            <td>${raceTime}</td>
+          `;
+        } catch (e) {
+          console.error("QR Code non valide (pas un JSON)", e);
+        }
+      } else {
+        console.log("Aucun QR détecté");
+      }
+      requestAnimationFrame(scanQRCode);
     }
   </script>
+
 </body>
 </html>
