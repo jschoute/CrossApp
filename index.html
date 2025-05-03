@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -8,19 +7,26 @@
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f4; }
     h1 { text-align: center; }
-    #startTimeDisplay { font-size: 1.2em; margin-bottom: 10px; }
+    #startTimeDisplay, #sessionCodeDisplay { font-size: 1.1em; margin: 10px 0; }
     table { width: 100%; border-collapse: collapse; margin-top: 20px; }
     th, td { padding: 8px 12px; border: 1px solid #ccc; text-align: center; }
     th { background-color: #eee; }
-    #video { width: 100%; max-width: 600px; margin: 20px auto; display: block; }
-    #startButton { margin-bottom: 10px; }
+    #video { width: 100%; max-width: 600px; margin: 20px auto; display: none; }
+    #qrCanvas { display: block; margin: 10px auto; }
+    button { margin: 5px; padding: 10px; font-size: 1em; }
   </style>
 </head>
 <body>
   <h1>Chronométrage du Cross - Scanner QR Code</h1>
-  <button id="startButton">Démarrer la course</button>
+  <div>
+    <button id="startRaceBtn">Démarrer la course (Organisateur 1)</button>
+    <button id="startScanBtn" style="display:none;">Commencer à scanner (Organisateurs 2+)</button>
+  </div>
+  <div id="sessionCodeDisplay"></div>
   <div id="startTimeDisplay">Heure de départ : -</div>
+  <canvas id="qrCanvas"></canvas>
   <video id="video" autoplay muted playsinline></video>
+
   <table id="resultsTable">
     <thead>
       <tr>
@@ -36,37 +42,103 @@
   </table>
 
   <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
   <script>
-    let startTime = null;
-    let video = document.getElementById("video");
-    let startTimeDisplay = document.getElementById("startTimeDisplay");
-    let resultTable = document.getElementById("resultsTable").getElementsByTagName("tbody")[0];
+    const sheetURL = "https://script.google.com/macros/s/AKfycbx5Ni3LR9QbqLwIbabBYtUFaE-0SMCheYnG5oxcdNZ_gssy3rBoJYTJwPYmGHLo7WQF_w/exec";
 
-    document.getElementById("startButton").onclick = () => {
+    let video = document.getElementById("video");
+    let canvas = document.createElement("canvas");
+    let context = canvas.getContext("2d");
+    let startTime = null;
+    let sessionCode = null;
+    let isScanning = false;
+    let scannedCodes = new Set();
+
+    const startTimeDisplay = document.getElementById("startTimeDisplay");
+    const sessionCodeDisplay = document.getElementById("sessionCodeDisplay");
+    const qrCanvas = document.getElementById("qrCanvas");
+    const resultTable = document.querySelector("#resultsTable tbody");
+
+    // Créer un code de session unique
+    function generateSessionCode() {
+      const now = new Date();
+      const timestamp = now.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+      return `${timestamp}-${Math.random().toString(16).substr(2, 6)}`;
+    }
+
+    // Générer et afficher le QR de session
+    function showQRSessionCode(code, startTimeStr) {
+      const payload = JSON.stringify({ sessionCode: code, startTime: startTimeStr });
+      QRCode.toCanvas(qrCanvas, payload, { width: 250 }, (error) => {
+        if (error) console.error("QR Error:", error);
+      });
+    }
+
+    // Lancer la course (Organisateur 1)
+    document.getElementById("startRaceBtn").onclick = () => {
       startTime = new Date();
+      sessionCode = generateSessionCode();
+      const startTimeStr = startTime.toISOString();
       startTimeDisplay.textContent = "Heure de départ : " + startTime.toLocaleTimeString();
+      sessionCodeDisplay.textContent = "Code de session : " + sessionCode;
+      showQRSessionCode(sessionCode, startTimeStr);
+      document.getElementById("startScanBtn").style.display = "inline-block";
     };
 
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(stream => {
-      video.srcObject = stream;
-      let canvas = document.createElement("canvas");
-      let context = canvas.getContext("2d");
+    // Rejoindre une course (Organisateur 2+)
+    document.getElementById("startScanBtn").onclick = () => {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(stream => {
+        video.srcObject = stream;
+        video.style.display = "block";
 
+        function scanSyncCode() {
+          if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            let imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+            let code = jsQR(imageData.data, imageData.width, imageData.height);
+            if (code) {
+              try {
+                let data = JSON.parse(code.data);
+                if (data.sessionCode && data.startTime) {
+                  sessionCode = data.sessionCode;
+                  startTime = new Date(data.startTime);
+                  startTimeDisplay.textContent = "Heure de départ : " + startTime.toLocaleTimeString();
+                  sessionCodeDisplay.textContent = "Synchronisé avec : " + sessionCode;
+                  qrCanvas.style.display = "none";
+                  startQRCodeScan(); // commence le scan des coureurs
+                }
+              } catch {}
+            }
+          }
+          if (!startTime) requestAnimationFrame(scanSyncCode);
+        }
+
+        scanSyncCode();
+      });
+    };
+
+    function startQRCodeScan() {
+      isScanning = true;
       function scan() {
+        if (!isScanning) return;
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
           context.drawImage(video, 0, 0, canvas.width, canvas.height);
           let imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-          let code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
-          if (code) {
+          let code = jsQR(imageData.data, imageData.width, imageData.height);
+          if (code && !scannedCodes.has(code.data)) {
+            scannedCodes.add(code.data);
             processQRCode(code.data);
+            setTimeout(() => scannedCodes.delete(code.data), 3000); // éviter doublons
           }
         }
         requestAnimationFrame(scan);
       }
       scan();
-    });
+    }
 
     function processQRCode(data) {
       if (!startTime) {
@@ -99,15 +171,14 @@
         <td>${raceTime}</td>
       `;
 
-      // Envoi vers Google Sheets
-      const sheetURL = "https://script.google.com/macros/s/https://script.google.com/macros/s/AKfycbx5Ni3LR9QbqLwIbabBYtUFaE-0SMCheYnG5oxcdNZ_gssy3rBoJYTJwPYmGHLo7WQF_w/exec";
-      let payload = {
+      const payload = {
         nom: qrData.nom,
         prenom: qrData.prenom,
         classe: qrData.classe,
         equipe: qrData.equipe,
         numero: qrData.numero,
-        temps: raceTime
+        temps: raceTime,
+        session: sessionCode
       };
 
       fetch(sheetURL, {
