@@ -146,7 +146,7 @@
           let qrData = JSON.parse(code.data);
           scannedCodes.add(code.data);
 
-          showNotification(`Coureur n°${qrData.numero} enregistré`);
+          showNotification(`Coureur ${qrData.nom} ${qrData.prenom} enregistré`);
           beep.play().catch(e => console.warn("Lecture audio bloquée :", e));
 
           let arrivalTime = new Date();
@@ -155,6 +155,9 @@
           startDate.setHours(h, m, s);
 
           let raceTime = Math.floor((arrivalTime - startDate) / 1000);
+          let minutes = Math.floor(raceTime / 60);
+          let seconds = raceTime % 60;
+          let formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
           let newRow = resultTable.insertRow();
           newRow.innerHTML = `
@@ -163,7 +166,7 @@
             <td>${qrData.classe}</td>
             <td>${qrData.equipe}</td>
             <td>${qrData.numero}</td>
-            <td>${raceTime}</td>
+            <td>${formattedTime}</td>
           `;
         } catch (e) {
           console.error("QR Code non valide (pas un JSON)", e);
