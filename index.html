@@ -31,6 +31,7 @@
 <body>
 
   <div id="notification"></div>
+  <audio id="beep" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" preload="auto"></audio>
 
   <h1>Gestion du classement pour le Cross</h1>
 
@@ -72,8 +73,7 @@
     let resultTable = document.querySelector('#result-table tbody');
     let scannerStream = null;
     let scannedCodes = new Set();
-
-    const beep = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=");
+    const beep = document.getElementById("beep");
 
     document.getElementById('start-time').addEventListener('input', function() {
       startTime = this.value;
@@ -131,7 +131,7 @@
       notif.style.display = 'block';
       setTimeout(() => {
         notif.style.display = 'none';
-      }, 2000);
+      }, 5000);
     }
 
     function scanQRCode() {
@@ -142,12 +142,12 @@
       let code = jsQR(imageData.data, canvasElement.width, canvasElement.height);
 
       if (code && !scannedCodes.has(code.data)) {
-        console.log("QR détecté :", code.data);
         try {
           let qrData = JSON.parse(code.data);
           scannedCodes.add(code.data);
+
           showNotification(`Coureur n°${qrData.numero} enregistré`);
-          beep.play(); // 🔊 signal sonore
+          beep.play().catch(e => console.warn("Lecture audio bloquée :", e));
 
           let arrivalTime = new Date();
           let startDate = new Date();
