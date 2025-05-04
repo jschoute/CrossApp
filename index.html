@@ -11,9 +11,26 @@
     table { margin-top: 20px; border-collapse: collapse; width: 100%; }
     th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
     th { background-color: #f2f2f2; }
+
+    #notification {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #4caf50;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 5px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      display: none;
+      z-index: 1000;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
+
+  <div id="notification"></div>
 
   <h1>Gestion du classement pour le Cross</h1>
 
@@ -54,6 +71,9 @@
     let canvasContext = canvasElement.getContext('2d');
     let resultTable = document.querySelector('#result-table tbody');
     let scannerStream = null;
+    let scannedCodes = new Set();
+
+    const beep = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=");
 
     document.getElementById('start-time').addEventListener('input', function() {
       startTime = this.value;
@@ -105,6 +125,15 @@
       document.getElementById('stop-scanner-btn').style.display = 'none';
     }
 
+    function showNotification(message) {
+      const notif = document.getElementById('notification');
+      notif.textContent = message;
+      notif.style.display = 'block';
+      setTimeout(() => {
+        notif.style.display = 'none';
+      }, 2000);
+    }
+
     function scanQRCode() {
       if (!isScanning) return;
 
@@ -112,12 +141,13 @@
       let imageData = canvasContext.getImageData(0, 0, canvasElement.width, canvasElement.height);
       let code = jsQR(imageData.data, canvasElement.width, canvasElement.height);
 
-      if (code) {
+      if (code && !scannedCodes.has(code.data)) {
         console.log("QR détecté :", code.data);
         try {
           let qrData = JSON.parse(code.data);
-          let confirmation = confirm(`Confirmer l'arrivée du coureur n° ${qrData.numero} ?`);
-          if (!confirmation) return requestAnimationFrame(scanQRCode);
+          scannedCodes.add(code.data);
+          showNotification(`Coureur n°${qrData.numero} enregistré`);
+          beep.play(); // 🔊 signal sonore
 
           let arrivalTime = new Date();
           let startDate = new Date();
@@ -138,8 +168,6 @@
         } catch (e) {
           console.error("QR Code non valide (pas un JSON)", e);
         }
-      } else {
-        console.log("Aucun QR détecté");
       }
       requestAnimationFrame(scanQRCode);
     }
