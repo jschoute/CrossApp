@@ -85,7 +85,6 @@
       startTime = `${hours}:${minutes}:${seconds}`;
       document.getElementById('start-time').value = startTime;
 
-      // Créer un nom de feuille basé sur date/heure
       sheetName = `Course_${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}_${hours}h${minutes}m${seconds}s`;
     });
 
@@ -178,7 +177,6 @@
           beep.play().catch(e => console.warn("Lecture audio bloquée :", e));
           showNotification(`Coureur n°${qrData.numero} enregistré`);
 
-          // Envoi à Google Sheets
           fetch(scriptURL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -204,6 +202,7 @@
         }
       }
 
+      // Appel permanent pour continuer à scanner
       requestAnimationFrame(scanQRCode);
     }
   </script>
