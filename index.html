@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Application Cross - Scan QR Code</title>
   <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
   <style>
@@ -53,12 +53,12 @@
   <table id="result-table">
     <thead>
       <tr>
-        <th>Nom_Prénom</th>
+        <th>Nom</th>
+        <th>Prénom</th>
         <th>Classe</th>
         <th>Équipe</th>
         <th>N° du coureur</th>
-        <th>QRcontent</th>
-        <th>Temps de course (min:sec)</th>
+        <th>Temps de course</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -66,6 +66,7 @@
 
   <script>
     let startTime = null;
+    let sheetName = null;
     let isScanning = false;
     let videoElement = document.getElementById('video');
     let canvasElement = document.getElementById('canvas');
@@ -74,13 +75,9 @@
     let scannerStream = null;
     let scannedCodes = new Set();
     const beep = document.getElementById("beep");
-    let sheetName = "";
+    const scriptURL = "https://script.google.com/macros/s/AKfycbyZDGs6nJ9lhyz3bSBmrCJRaZg52LN8TDs32O9A0W2Bwpo5NgO1PkHh2dIgqJGoNRsnvA/exec";
 
-    document.getElementById('start-time').addEventListener('input', function() {
-      startTime = this.value;
-    });
-
-    document.getElementById('set-now-btn').addEventListener('click', function() {
+    document.getElementById('set-now-btn').addEventListener('click', function () {
       let now = new Date();
       let hours = String(now.getHours()).padStart(2, '0');
       let minutes = String(now.getMinutes()).padStart(2, '0');
@@ -88,13 +85,15 @@
       startTime = `${hours}:${minutes}:${seconds}`;
       document.getElementById('start-time').value = startTime;
 
-      // Créer un nom unique pour la feuille
-      let date = new Date();
-      sheetName = `${date.toLocaleDateString()}_${date.toLocaleTimeString()}`;
-      console.log("Nom de la feuille : ", sheetName);
+      // Créer un nom de feuille basé sur date/heure
+      sheetName = `Course_${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}_${hours}h${minutes}m${seconds}s`;
     });
 
-    document.getElementById('start-scanner-btn').addEventListener('click', function() {
+    document.getElementById('start-time').addEventListener('input', function () {
+      startTime = this.value;
+    });
+
+    document.getElementById('start-scanner-btn').addEventListener('click', function () {
       if (startTime && !isScanning) {
         isScanning = true;
         document.getElementById('scanner').style.display = 'block';
@@ -107,17 +106,16 @@
 
     function startCamera() {
       navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-        .then(function(stream) {
+        .then(function (stream) {
           videoElement.srcObject = stream;
           scannerStream = stream;
-
-          videoElement.onloadedmetadata = function() {
+          videoElement.onloadedmetadata = function () {
             canvasElement.width = videoElement.videoWidth;
             canvasElement.height = videoElement.videoHeight;
             requestAnimationFrame(scanQRCode);
           };
         })
-        .catch(function(err) {
+        .catch(function (err) {
           console.error("Erreur d'accès à la caméra :", err);
         });
     }
@@ -131,13 +129,20 @@
       document.getElementById('stop-scanner-btn').style.display = 'none';
     }
 
-    function showNotification(message) {
+    function showNotification(message, isError = false) {
       const notif = document.getElementById('notification');
       notif.textContent = message;
+      notif.style.backgroundColor = isError ? '#e53935' : '#4caf50';
       notif.style.display = 'block';
       setTimeout(() => {
         notif.style.display = 'none';
-      }, 5000);
+      }, 3000);
+    }
+
+    function formatTime(seconds) {
+      const min = Math.floor(seconds / 60);
+      const sec = seconds % 60;
+      return `${min}:${String(sec).padStart(2, '0')}`;
     }
 
     function scanQRCode() {
@@ -152,18 +157,13 @@
           let qrData = JSON.parse(code.data);
           scannedCodes.add(code.data);
 
-          showNotification(`Coureur n°${qrData.numero} enregistré`);
-          beep.play().catch(e => console.warn("Lecture audio bloquée :", e));
-
           let arrivalTime = new Date();
           let startDate = new Date();
           let [h, m, s] = startTime.split(':');
-          startDate.setHours(h, m, s);
+          startDate.setHours(h, m, s || 0);
 
-          let raceTime = Math.floor((arrivalTime - startDate) / 1000);
-          let minutes = Math.floor(raceTime / 60);
-          let seconds = raceTime % 60;
-          let raceTimeFormatted = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+          let raceSeconds = Math.floor((arrivalTime - startDate) / 1000);
+          let formattedTime = formatTime(raceSeconds);
 
           let newRow = resultTable.insertRow();
           newRow.innerHTML = `
@@ -172,40 +172,39 @@
             <td>${qrData.classe}</td>
             <td>${qrData.equipe}</td>
             <td>${qrData.numero}</td>
-            <td>${raceTimeFormatted}</td>
+            <td>${formattedTime}</td>
           `;
 
-          // Envoi des données vers Google Sheets
-          sendDataToSheets(qrData.nom, qrData.prenom, qrData.classe, qrData.equipe, qrData.numero, raceTimeFormatted);
+          beep.play().catch(e => console.warn("Lecture audio bloquée :", e));
+          showNotification(`Coureur n°${qrData.numero} enregistré`);
+
+          // Envoi à Google Sheets
+          fetch(scriptURL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              nom: qrData.nom,
+              prenom: qrData.prenom,
+              classe: qrData.classe,
+              equipe: qrData.equipe,
+              numero: qrData.numero,
+              temps: formattedTime,
+              sheetName: sheetName
+            })
+          }).then(response => response.text())
+            .then(msg => console.log("Réponse du script :", msg))
+            .catch(err => {
+              console.error("Erreur d'envoi vers Google Sheets :", err);
+              showNotification("Erreur d'envoi vers Google Sheets", true);
+            });
 
         } catch (e) {
-          console.error("QR Code non valide (pas un JSON)", e);
+          console.error("QR Code invalide :", e);
+          showNotification("QR Code invalide", true);
         }
       }
+
       requestAnimationFrame(scanQRCode);
-    }
-
-    function sendDataToSheets(nom, prenom, classe, equipe, numero, temps) {
-      const data = {
-        sheetName: sheetName,
-        nom: nom,
-        prenom: prenom,
-        classe: classe,
-        equipe: equipe,
-        numero: numero,
-        temps: temps
-      };
-
-      fetch("https://script.google.com/macros/s/AKfycbzs3zJvrQtoDcDAqzUZHfjtvjuKWYEejyFVUpPzHGHgTTy8dI_s3wFSQYJjnVZp3SEJIQ/exec", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(data)
-      })
-      .then(response => response.text())
-      .then(responseText => console.log(responseText))
-      .catch(error => console.error("Erreur d'envoi vers Google Sheets", error));
     }
   </script>
 
