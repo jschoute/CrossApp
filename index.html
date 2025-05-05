@@ -58,7 +58,7 @@
         <th>Équipe</th>
         <th>N° du coureur</th>
         <th>QRcontent</th>
-        <th>Temps de course (en secondes)</th>
+        <th>Temps de course (min:sec)</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -74,6 +74,7 @@
     let scannerStream = null;
     let scannedCodes = new Set();
     const beep = document.getElementById("beep");
+    let sheetName = "";
 
     document.getElementById('start-time').addEventListener('input', function() {
       startTime = this.value;
@@ -86,6 +87,11 @@
       let seconds = String(now.getSeconds()).padStart(2, '0');
       startTime = `${hours}:${minutes}:${seconds}`;
       document.getElementById('start-time').value = startTime;
+
+      // Créer un nom unique pour la feuille
+      let date = new Date();
+      sheetName = `${date.toLocaleDateString()}_${date.toLocaleTimeString()}`;
+      console.log("Nom de la feuille : ", sheetName);
     });
 
     document.getElementById('start-scanner-btn').addEventListener('click', function() {
@@ -146,7 +152,7 @@
           let qrData = JSON.parse(code.data);
           scannedCodes.add(code.data);
 
-          showNotification(`Coureur ${qrData.nom} ${qrData.prenom} enregistré`);
+          showNotification(`Coureur n°${qrData.numero} enregistré`);
           beep.play().catch(e => console.warn("Lecture audio bloquée :", e));
 
           let arrivalTime = new Date();
@@ -157,7 +163,7 @@
           let raceTime = Math.floor((arrivalTime - startDate) / 1000);
           let minutes = Math.floor(raceTime / 60);
           let seconds = raceTime % 60;
-          let formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+          let raceTimeFormatted = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 
           let newRow = resultTable.insertRow();
           newRow.innerHTML = `
@@ -166,13 +172,40 @@
             <td>${qrData.classe}</td>
             <td>${qrData.equipe}</td>
             <td>${qrData.numero}</td>
-            <td>${formattedTime}</td>
+            <td>${raceTimeFormatted}</td>
           `;
+
+          // Envoi des données vers Google Sheets
+          sendDataToSheets(qrData.nom, qrData.prenom, qrData.classe, qrData.equipe, qrData.numero, raceTimeFormatted);
+
         } catch (e) {
           console.error("QR Code non valide (pas un JSON)", e);
         }
       }
       requestAnimationFrame(scanQRCode);
+    }
+
+    function sendDataToSheets(nom, prenom, classe, equipe, numero, temps) {
+      const data = {
+        sheetName: sheetName,
+        nom: nom,
+        prenom: prenom,
+        classe: classe,
+        equipe: equipe,
+        numero: numero,
+        temps: temps
+      };
+
+      fetch("https://script.google.com/macros/s/AKfycbzs3zJvrQtoDcDAqzUZHfjtvjuKWYEejyFVUpPzHGHgTTy8dI_s3wFSQYJjnVZp3SEJIQ/exec", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data)
+      })
+      .then(response => response.text())
+      .then(responseText => console.log(responseText))
+      .catch(error => console.error("Erreur d'envoi vers Google Sheets", error));
     }
   </script>
 
