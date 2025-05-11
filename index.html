@@ -178,29 +178,28 @@
           showNotification(`Coureur n°${qrData.numero} enregistré`);
 
           fetch(scriptURL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              nom: qrData.nom,
-              prenom: qrData.prenom,
-              classe: qrData.classe,
-              equipe: qrData.equipe,
-              numero: qrData.numero,
-              temps: formattedTime,
-              sheetName: sheetName
-            })
-          }).then(response => response.text())
-            .then(msg => console.log("Réponse du script :", msg))
-            .catch(err => {
-              console.error("Erreur d'envoi vers Google Sheets :", err);
-              showNotification("Erreur d'envoi vers Google Sheets", true);
-            });
-
-        } catch (e) {
-          console.error("QR Code invalide :", e);
-          showNotification("QR Code invalide", true);
-        }
-      }
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    nom: qrData.nom,
+    prenom: qrData.prenom,
+    classe: qrData.classe,
+    equipe: qrData.equipe,
+    numero: qrData.numero,
+    temps: formattedTime,
+    sheetName: sheetName
+  })
+}).then(response => response.text())
+  .then(msg => {
+    console.log("Réponse du script :", msg);
+    if (msg !== "OK") {
+      showNotification("Erreur : " + msg, true);
+    }
+  })
+  .catch(err => {
+    console.error("Erreur réseau ou fetch :", err);
+    showNotification("Erreur réseau : " + err.message, true);
+  });
 
       // Appel permanent pour continuer à scanner
       requestAnimationFrame(scanQRCode);
