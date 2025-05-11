@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Application Cross - Scan QR Code</title>
   <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
   <style>
@@ -56,16 +56,16 @@
         <th>Prénom</th>
         <th>Classe</th>
         <th>Équipe</th>
-        <th>N° du coureur</th>
-        <th>Temps (min:sec)</th>
-        <th>Réponse du serveur</th>
+        <th>N°</th>
+        <th>Temps</th>
+        <th>Statut</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
 
   <script>
-    const scriptURL = "https://script.google.com/macros/s/https://script.google.com/macros/s/AKfycbyMiPAIg-O3QwZy_JZfCJm78T6PRi6jsPuzEWYpl8vb1kYvayL0PY69TNM96ShG4DXU9Q/exec"; // ← À personnaliser
+    const scriptURL = "https://script.google.com/macros/s/AKfycbyMiPAIg-O3QwZy_JZfCJm78T6PRi6jsPuzEWYpl8vb1kYvayL0PY69TNM96ShG4DXU9Q/exec";
     let startTime = null;
     let isScanning = false;
     let sheetName = "";
@@ -83,9 +83,7 @@
       notif.textContent = message;
       notif.style.backgroundColor = isError ? '#e53935' : '#4caf50';
       notif.style.display = 'block';
-      setTimeout(() => {
-        notif.style.display = 'none';
-      }, 4000);
+      setTimeout(() => { notif.style.display = 'none'; }, 4000);
     }
 
     document.getElementById('set-now-btn').addEventListener('click', () => {
@@ -97,7 +95,6 @@
       document.getElementById('start-time').value = startTime;
 
       sheetName = `Course_${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}_${h}h${m}m${s}s`;
-      console.log("Feuille cible :", sheetName);
     });
 
     document.getElementById('start-time').addEventListener('input', function () {
@@ -130,7 +127,7 @@
         })
         .catch(err => {
           console.error("Erreur caméra :", err);
-          showNotification("Accès à la caméra refusé", true);
+          showNotification("Accès caméra refusé", true);
         });
     }
 
@@ -167,6 +164,7 @@
           showNotification(`Coureur n°${qrData.numero} enregistré`);
 
           const row = resultTable.insertRow();
+          const statusId = `status-${qrData.numero}`;
           row.innerHTML = `
             <td>${qrData.nom}</td>
             <td>${qrData.prenom}</td>
@@ -174,10 +172,10 @@
             <td>${qrData.equipe}</td>
             <td>${qrData.numero}</td>
             <td>${formattedTime}</td>
-            <td id="status-${qrData.numero}">Envoi...</td>
+            <td id="${statusId}">Envoi...</td>
           `;
 
-          sendToSheet({ ...qrData, temps: formattedTime }, `status-${qrData.numero}`);
+          sendToSheet({ ...qrData, temps: formattedTime }, statusId);
 
         } catch (err) {
           console.error("QR Code invalide :", err);
@@ -201,14 +199,16 @@
 
       fetch(scriptURL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify(payload)
       })
       .then(response => response.text())
       .then(msg => {
         console.log("Réponse Apps Script :", msg);
         document.getElementById(statusCellId).textContent = msg;
-        if (msg !== "OK") showNotification("Erreur lors de l'envoi : " + msg, true);
+        if (msg !== "OK") showNotification("Erreur : " + msg, true);
       })
       .catch(error => {
         console.error("Erreur réseau :", error);
