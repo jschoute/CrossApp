@@ -197,24 +197,26 @@
         temps: data.temps
       };
 
-      fetch(scriptURL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      })
-      .then(response => response.text())
-      .then(msg => {
-        console.log("Réponse Apps Script :", msg);
-        document.getElementById(statusCellId).textContent = msg;
-        if (msg !== "OK") showNotification("Erreur : " + msg, true);
-      })
-      .catch(error => {
-        console.error("Erreur réseau :", error);
-        document.getElementById(statusCellId).textContent = "Erreur";
-        showNotification("Erreur réseau : " + error.message, true);
-      });
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", scriptURL, true);
+      xhr.setRequestHeader("Content-Type", "application/json");
+
+      xhr.onreadystatechange = function () {
+        const cell = document.getElementById(statusCellId);
+        if (xhr.readyState === XMLHttpRequest.DONE) {
+          if (xhr.status === 200) {
+            console.log("Réponse Apps Script :", xhr.responseText);
+            cell.textContent = xhr.responseText;
+            if (xhr.responseText !== "OK") showNotification("Erreur : " + xhr.responseText, true);
+          } else {
+            console.error("Erreur réseau :", xhr.statusText);
+            cell.textContent = "Erreur";
+            showNotification("Erreur réseau : " + xhr.statusText, true);
+          }
+        }
+      };
+
+      xhr.send(JSON.stringify(payload));
     }
   </script>
 
