@@ -64,8 +64,11 @@
     <tbody></tbody>
   </table>
 
+  <br>
+  <button onclick="exportAllToGoogleSheet()">Exporter vers Google Sheets</button>
+
   <script>
-    const scriptURL = "https://script.google.com/macros/s/AKfycby8cPsbifF_FXX7ZxxGs_TP5mqbafXfZ1MLskwbv6b3rE36AaTyg_1FpQo7ILMWAZyq_g/exec";
+    const scriptURL = "https://script.google.com/macros/s/AKfycbxfsKss9qaBB6VfSDYV5Wxb4Acrh3mXnI1w4oNr6Lo4KcONGdv-4NLQgmp_0fHDsWD3iw/exec"; // Remplace par ton URL Apps Script
     let startTime = null;
     let isScanning = false;
     let sheetName = "";
@@ -164,7 +167,6 @@
           showNotification(`Coureur n°${qrData.numero} enregistré`);
 
           const row = resultTable.insertRow();
-          const statusId = `status-${qrData.numero}`;
           row.innerHTML = `
             <td>${qrData.nom}</td>
             <td>${qrData.prenom}</td>
@@ -172,11 +174,8 @@
             <td>${qrData.equipe}</td>
             <td>${qrData.numero}</td>
             <td>${formattedTime}</td>
-            <td id="${statusId}">Envoi...</td>
+            <td>En attente</td>
           `;
-
-          sendToSheet({ ...qrData, temps: formattedTime }, statusId);
-
         } catch (err) {
           console.error("QR Code invalide :", err);
           showNotification("QR Code invalide", true);
@@ -186,39 +185,43 @@
       requestAnimationFrame(scanQRCode);
     }
 
-    function sendToSheet(data, statusCellId) {
-      const payload = {
-        sheetName: sheetName,
-        nom: data.nom,
-        prenom: data.prenom,
-        classe: data.classe,
-        equipe: data.equipe,
-        numero: data.numero,
-        temps: data.temps
-      };
+    function exportAllToGoogleSheet() {
+      const rows = document.querySelectorAll("#result-table tbody tr");
 
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", scriptURL, true);
-      xhr.setRequestHeader("Content-Type", "application/json");
+      if (rows.length === 0) {
+        showNotification("Aucune donnée à exporter.", true);
+        return;
+      }
 
-      xhr.onreadystatechange = function () {
-        const cell = document.getElementById(statusCellId);
-        if (xhr.readyState === XMLHttpRequest.DONE) {
-          if (xhr.status === 200) {
-            console.log("Réponse Apps Script :", xhr.responseText);
-            cell.textContent = xhr.responseText;
-            if (xhr.responseText !== "OK") showNotification("Erreur : " + xhr.responseText, true);
-          } else {
-            console.error("Erreur réseau :", xhr.statusText);
-            cell.textContent = "Erreur";
-            showNotification("Erreur réseau : " + xhr.statusText, true);
-          }
+      const data = Array.from(rows).map(row => {
+        const cells = row.querySelectorAll("td");
+        return {
+          nom: cells[0].textContent.trim(),
+          prenom: cells[1].textContent.trim(),
+          classe: cells[2].textContent.trim(),
+          equipe: cells[3].textContent.trim(),
+          numero: cells[4].textContent.trim(),
+          temps: cells[5].textContent.trim()
+        };
+      });
+
+      fetch(scriptURL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sheetName: sheetName || "Cross Résultats", lignes: data })
+      })
+      .then(response => response.json())
+      .then(result => {
+        if (result.success) {
+          showNotification("Exportation réussie !");
+        } else {
+          showNotification("Erreur : " + result.error, true);
         }
-      };
-
-      xhr.send(JSON.stringify(payload));
+      })
+      .catch(error => {
+        showNotification("Erreur réseau : " + error.message, true);
+      });
     }
   </script>
-
 </body>
 </html>
