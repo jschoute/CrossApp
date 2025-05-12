@@ -46,7 +46,7 @@
 
   <div class="inline-buttons">
     <button id="set-now-btn">Commencer maintenant</button>
-    <button id="export-pdf-btn" style="display: none;">Exporter en PDF</button>
+    <button id="export-pdf-btn">Exporter en PDF</button>
   </div>
 
   <br>
@@ -87,7 +87,6 @@
     const canvasContext = canvasElement.getContext('2d');
     const resultTable = document.querySelector('#result-table tbody');
     const beep = document.getElementById("beep");
-    const exportPdfBtn = document.getElementById("export-pdf-btn");
     let scannerStream = null;
 
     function showNotification(message, isError = false) {
@@ -185,12 +184,6 @@
             <td>${formattedTime}</td>
             <td>✓</td>
           `;
-
-          // ➕ Affiche le bouton PDF après le premier scan
-          if (resultTable.rows.length === 1) {
-            exportPdfBtn.style.display = "inline-block";
-          }
-
         } catch (err) {
           console.error("QR Code invalide :", err);
           showNotification("QR Code invalide", true);
@@ -200,8 +193,15 @@
       requestAnimationFrame(scanQRCode);
     }
 
-    function exportToPDF() {
-      const element = document.getElementById('result-table');
+    document.getElementById('export-pdf-btn').addEventListener('click', () => {
+      const table = document.getElementById('result-table');
+      const hasRows = table.querySelectorAll('tbody tr').length > 0;
+
+      if (!hasRows) {
+        showNotification("Le tableau d'arrivée est vide", true);
+        return;
+      }
+
       const opt = {
         margin: 0.5,
         filename: `resultats-cross-${new Date().toISOString().split('T')[0]}.pdf`,
@@ -209,10 +209,9 @@
         html2canvas: { scale: 2 },
         jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
       };
-      html2pdf().from(element).set(opt).save();
-    }
 
-    exportPdfBtn.addEventListener("click", exportToPDF);
+      html2pdf().from(table).set(opt).save();
+    });
   </script>
 </body>
 </html>
