@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Application Cross - Scan QR Code</title>
   <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; }
     #scanner { display: none; }
@@ -25,6 +26,12 @@
       z-index: 1000;
       font-weight: bold;
     }
+    .inline-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      align-items: center;
+    }
   </style>
 </head>
 <body>
@@ -36,8 +43,13 @@
 
   <label for="start-time">Heure de début de la course :</label>
   <input type="time" id="start-time" required>
-  <button id="set-now-btn">Commencer maintenant</button>
-  <br><br>
+
+  <div class="inline-buttons">
+    <button id="set-now-btn">Commencer maintenant</button>
+    <button id="export-pdf-btn" style="display: none;">Exporter en PDF</button>
+  </div>
+
+  <br>
 
   <button id="start-scanner-btn">Commencer à scanner</button>
   <button id="stop-scanner-btn" style="display:none;">Arrêter de scanner</button>
@@ -64,11 +76,7 @@
     <tbody></tbody>
   </table>
 
-  <br>
-  <button onclick="exportAllToGoogleSheet()">Exporter vers Google Sheets</button>
-
   <script>
-    const scriptURL = "https://script.google.com/macros/s/AKfycbxfsKss9qaBB6VfSDYV5Wxb4Acrh3mXnI1w4oNr6Lo4KcONGdv-4NLQgmp_0fHDsWD3iw/exec"; // Remplace par ton URL Apps Script
     let startTime = null;
     let isScanning = false;
     let sheetName = "";
@@ -79,6 +87,7 @@
     const canvasContext = canvasElement.getContext('2d');
     const resultTable = document.querySelector('#result-table tbody');
     const beep = document.getElementById("beep");
+    const exportPdfBtn = document.getElementById("export-pdf-btn");
     let scannerStream = null;
 
     function showNotification(message, isError = false) {
@@ -174,8 +183,14 @@
             <td>${qrData.equipe}</td>
             <td>${qrData.numero}</td>
             <td>${formattedTime}</td>
-            <td>En attente</td>
+            <td>✓</td>
           `;
+
+          // ➕ Affiche le bouton PDF après le premier scan
+          if (resultTable.rows.length === 1) {
+            exportPdfBtn.style.display = "inline-block";
+          }
+
         } catch (err) {
           console.error("QR Code invalide :", err);
           showNotification("QR Code invalide", true);
@@ -185,43 +200,19 @@
       requestAnimationFrame(scanQRCode);
     }
 
-    function exportAllToGoogleSheet() {
-      const rows = document.querySelectorAll("#result-table tbody tr");
-
-      if (rows.length === 0) {
-        showNotification("Aucune donnée à exporter.", true);
-        return;
-      }
-
-      const data = Array.from(rows).map(row => {
-        const cells = row.querySelectorAll("td");
-        return {
-          nom: cells[0].textContent.trim(),
-          prenom: cells[1].textContent.trim(),
-          classe: cells[2].textContent.trim(),
-          equipe: cells[3].textContent.trim(),
-          numero: cells[4].textContent.trim(),
-          temps: cells[5].textContent.trim()
-        };
-      });
-
-      fetch(scriptURL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sheetName: sheetName || "Cross Résultats", lignes: data })
-      })
-      .then(response => response.json())
-      .then(result => {
-        if (result.success) {
-          showNotification("Exportation réussie !");
-        } else {
-          showNotification("Erreur : " + result.error, true);
-        }
-      })
-      .catch(error => {
-        showNotification("Erreur réseau : " + error.message, true);
-      });
+    function exportToPDF() {
+      const element = document.getElementById('result-table');
+      const opt = {
+        margin: 0.5,
+        filename: `resultats-cross-${new Date().toISOString().split('T')[0]}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
+      html2pdf().from(element).set(opt).save();
     }
+
+    exportPdfBtn.addEventListener("click", exportToPDF);
   </script>
 </body>
 </html>
